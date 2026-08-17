@@ -33,20 +33,21 @@ final class Plugin {
 	/**
 	 * Private constructor for singleton.
 	 *
-	 * @param array|null $services Optional injected services array.
+	 * @param array|null $services Optional injected services array (used by tests to bypass build_services()).
 	 */
-	private function __construct( array $services = null ) {
+	private function __construct( ?array $services = null ) {
 		$this->services = null !== $services ? $services : $this->build_services();
 	}
 
 	/**
 	 * Get instance.
 	 *
+	 * @param array|null $services Optional injected services array, only honoured on first call before the singleton exists.
 	 * @return Plugin
 	 */
-	public static function get_instance() {
+	public static function get_instance( ?array $services = null ) {
 		if ( null === self::$instance ) {
-			self::$instance = new self();
+			self::$instance = new self( $services );
 		}
 		return self::$instance;
 	}
@@ -81,7 +82,7 @@ final class Plugin {
 	 * @return void
 	 */
 	public function boot(): void {
-		/**
+{{BOOT_HOOKS}}		/**
 		 * Filter the services to be registered.
 		 *
 		 * @param array $services Array of Registrable service instances.

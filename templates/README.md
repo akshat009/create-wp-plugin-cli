@@ -4,7 +4,7 @@
 
 ## Requirements
 - PHP {{MIN_PHP}}+
-- WordPress 6.0+
+- WordPress {{REQUIRES_AT_LEAST}}+
 
 ## Installation
 1. Clone or download this repository into your `wp-content/plugins/` directory.

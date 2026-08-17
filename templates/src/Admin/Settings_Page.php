@@ -97,7 +97,7 @@ class Settings_Page implements Registrable {
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-			<form method="post" action="options.php">
+{{REACT_ADMIN_ROOT}}			<form method="post" action="options.php">
 				<?php
 				settings_fields( '{{PREFIX}}_options_group' );
 				do_settings_sections( '{{SLUG}}' );

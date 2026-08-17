@@ -1,0 +1,16 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "{{PREFIX}}/cart-summary",
+	"title": "{{PLUGIN_NAME}} Cart Summary",
+	"category": "woocommerce",
+	"icon": "cart",
+	"description": "Displays a live WooCommerce cart summary (item count and subtotal).",
+	"keywords": [ "cart", "woocommerce" ],
+	"supports": {
+		"html": false
+	},
+	"textdomain": "{{SLUG}}",
+	"editorScript": "file:./index.js",
+	"render": "file:./render.php"
+}

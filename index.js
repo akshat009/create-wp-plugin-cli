@@ -68,6 +68,8 @@ export function validateSlug(val) {
 	return true;
 }
 
+const RESERVED_PREFIXES = new Set(['wp', 'wordpress', 'php', '__']);
+
 export function validatePrefix(val) {
 	if (!val || typeof val !== 'string' || val.trim().length === 0) {
 		return 'Function/constant prefix is required.';
@@ -81,6 +83,9 @@ export function validatePrefix(val) {
 	if (!/^[a-z][a-z0-9_]*$/.test(val)) {
 		return 'Prefix must start with a lowercase letter and contain only lowercase letters, numbers, and underscores.';
 	}
+	if (RESERVED_PREFIXES.has(val.toLowerCase())) {
+		return 'Prefix cannot be a reserved word ("wp", "wordpress", "php") — WordPress.org plugin review and WPCS PrefixAllGlobals will reject it.';
+	}
 	return true;
 }
 
@@ -88,11 +93,8 @@ export function validateNamespace(val) {
 	if (!val || typeof val !== 'string' || val.trim().length === 0) {
 		return 'PHP namespace is required.';
 	}
-	if (val.includes('\\')) {
-		return 'Namespace must be a single segment without backslashes (nested namespaces are not allowed).';
-	}
-	if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(val)) {
-		return 'Namespace must start with a letter or underscore and contain only ASCII letters, numbers, and underscores.';
+	if (!/^[A-Za-z_][A-Za-z0-9_]*(\\[A-Za-z_][A-Za-z0-9_]*)*$/.test(val)) {
+		return 'Namespace must be one or more \\-separated segments (e.g. MyPlugin or Vendor\\MyPlugin), each starting with a letter or underscore and containing only ASCII letters, numbers, and underscores.';
 	}
 	return true;
 }
@@ -121,15 +123,9 @@ export function validateOutputDir(val) {
 	if (!val || typeof val !== 'string' || val.trim().length === 0) {
 		return 'Output directory is required.';
 	}
-	if (val.includes('..')) {
-		return 'Output directory cannot contain "..".';
-	}
-	const cwd = process.cwd();
-	const resolved = path.resolve(cwd, val);
-	const relative = path.relative(cwd, resolved);
-	if (relative.startsWith('..') || path.isAbsolute(relative)) {
-		return 'Output directory must be inside the current working directory.';
-	}
+	// Deliberately unrestricted beyond "non-empty": scaffolding into a sibling
+	// directory (e.g. --out ../plugins/my-plugin) is the common WP dev workflow.
+	// The real safety net is runGenerator()'s non-empty-directory guard below.
 	return true;
 }
 
@@ -199,9 +195,9 @@ Options:
   --description <string>   Plugin description
   --min-php <string>       Minimum PHP version
   --out <string>           Output directory
-  --modules <string>       Comma-separated list of modules (admin_settings,shortcode,rest_api,ajax_handler,cpt_taxonomy,cron,elementor_widget,woocommerce_hooks)
-  --react                  Include React asset build pipeline
-  --no-react               Do not include React asset build pipeline
+  --modules <string>       Comma-separated list of modules (admin_settings,shortcode,rest_api,ajax_handler,cpt_taxonomy,cron,elementor_widget,woocommerce_hooks,interactivity)
+  --react                  Include React admin app build pipeline (wp-admin only)
+  --no-react               Do not include React admin app build pipeline
 `);
 }
 
@@ -251,7 +247,7 @@ async function main() {
 		const authorUri = flags['author-uri'] || '';
 		const description = flags.description || 'A powerful modern WordPress plugin scaffold.';
 		const minPhp = flags['min-php'] || '8.0';
-		const useReact = flags.react ? true : (flags['no-react'] ? false : false);
+		const useReact = Boolean(flags.react);
 		const modules = flags.modules !== undefined ? parseModules(flags.modules) : [];
 		const outputDir = flags.out;
 
@@ -288,7 +284,8 @@ async function main() {
 			{ title: 'CPT + taxonomy', value: 'cpt_taxonomy' },
 			{ title: 'cron', value: 'cron' },
 			{ title: 'Elementor widget base', value: 'elementor_widget' },
-			{ title: 'WooCommerce hooks', value: 'woocommerce_hooks' }
+			{ title: 'WooCommerce hooks', value: 'woocommerce_hooks' },
+			{ title: 'Frontend Interactivity (WordPress Interactivity API)', value: 'interactivity' }
 		].map(c => ({
 			...c,
 			selected: initialModules.includes(c.value)
@@ -358,8 +355,8 @@ async function main() {
 			{
 				type: 'confirm',
 				name: 'useReact',
-				message: '10. Include React asset build pipeline (@wordpress/scripts)?',
-				initial: flags.react ? true : (flags['no-react'] ? false : false)
+				message: '10. Include React admin app build pipeline (@wordpress/scripts, wp-admin only)?',
+				initial: Boolean(flags.react)
 			},
 			{
 				type: 'multiselect',
@@ -415,7 +412,12 @@ async function main() {
 		}
 	}
 
-	runGenerator(answers);
+	try {
+		runGenerator(answers);
+	} catch (err) {
+		console.error(`\n❌ Error: ${err.message}`);
+		process.exit(1);
+	}
 }
 
 export function runGenerator(answers) {
@@ -424,18 +426,18 @@ export function runGenerator(answers) {
 	const targetDir = path.resolve(process.cwd(), outputDir);
 
 	if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
-		console.error(`\n❌ Error: Directory "${outputDir}" already exists and is not empty.`);
-		if (!answers.out) process.exit(1);
-		return;
+		throw new Error(`Directory "${outputDir}" already exists and is not empty.`);
 	}
 
 	fs.mkdirSync(targetDir, { recursive: true });
 
 	const selectedModules = answers.modules || [];
+	const hasInteractivity = selectedModules.includes('interactivity');
+	const hasWoo = selectedModules.includes('woocommerce_hooks');
 
 	const requiredPlugins = [];
 	if (selectedModules.includes('elementor_widget')) requiredPlugins.push('elementor');
-	if (selectedModules.includes('woocommerce_hooks')) requiredPlugins.push('woocommerce');
+	if (hasWoo) requiredPlugins.push('woocommerce');
 
 	let pluginHeaderExtra = '';
 	if (requiredPlugins.length > 0) {
@@ -445,7 +447,16 @@ export function runGenerator(answers) {
 		pluginHeaderExtra += ' * Elementor tested up to: 3.27.0\n * Elementor Pro tested up to: 3.27.0\n';
 	}
 
-	const woocommerceHpos = selectedModules.includes('woocommerce_hooks')
+	// The Interactivity API (wp_interactivity_state, Script Modules) requires WP 6.5+.
+	// The Cart Summary block's block.json "render" field requires WP 6.4+.
+	const requiredWpVersion = hasInteractivity ? '6.5' : (hasWoo ? '6.4' : '6.0');
+
+	// php-stubs/woocommerce-stubs gives PHPCS/Intelephense real class definitions for
+	// WC_Payment_Gateway, WC_Shipping_Method, WC_Email, WC_Product, etc.
+	const composerExtraRequireDev = hasWoo ? ',\n\t\t"php-stubs/woocommerce-stubs": "^9.0"' : '';
+	const vscodeExtraStubPath = hasWoo ? ',\n\t\t"vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php"' : '';
+
+	const woocommerceHpos = hasWoo
 		? `add_action(
 	'before_woocommerce_init',
 	function () {
@@ -468,10 +479,13 @@ export function runGenerator(answers) {
 		'{{AUTHOR_URI}}': answers.authorUri,
 		'{{DESCRIPTION}}': answers.description,
 		'{{MIN_PHP}}': answers.minPhp,
+		'{{REQUIRES_AT_LEAST}}': requiredWpVersion,
 		'{{VERSION}}': '0.1.0',
 		'{{YEAR}}': new Date().getFullYear().toString(),
 		'{{PLUGIN_HEADER_EXTRA}}': pluginHeaderExtra,
-		'{{WOOCOMMERCE_HPOS}}': woocommerceHpos
+		'{{WOOCOMMERCE_HPOS}}': woocommerceHpos,
+		'{{COMPOSER_EXTRA_REQUIRE_DEV}}': composerExtraRequireDev,
+		'{{VSCODE_EXTRA_STUB_PATH}}': vscodeExtraStubPath
 	};
 
 	function processTemplateContent(content) {
@@ -484,23 +498,7 @@ export function runGenerator(answers) {
 
 	function writeTemplateFile(srcPath, destRelativePath) {
 		const raw = fs.readFileSync(srcPath, 'utf8');
-		let processed = processTemplateContent(raw);
-		if (destRelativePath === 'phpcs.xml') {
-			const prefixLower = answers.prefix.toLowerCase();
-			const prefixUpper = answers.prefix.toUpperCase();
-			processed = processed.replace(
-				`<element value="${prefixLower}"/>`,
-				() => `<element value="${prefixLower}"/>\n\t\t\t\t<element value="${prefixLower}_"/>`
-			);
-			processed = processed.replace(
-				`<element value="${prefixUpper}"/>`,
-				() => `<element value="${prefixUpper}"/>\n\t\t\t\t<element value="${prefixUpper}_"/>`
-			);
-			processed = processed.replace(
-				'<rule ref="WordPress-VIP-Go"/>',
-				() => '<rule ref="WordPress-VIP-Go">\n\t\t<exclude name="WordPressVIPMinimum.Security.Mustache.OutputNotation"/>\n\t</rule>'
-			);
-		}
+		const processed = processTemplateContent(raw);
 		const destPath = path.join(targetDir, destRelativePath);
 		fs.mkdirSync(path.dirname(destPath), { recursive: true });
 		fs.writeFileSync(destPath, processed, 'utf8');
@@ -519,6 +517,7 @@ export function runGenerator(answers) {
 	writeTemplateFile(path.join(templatesDir, 'tests/Unit/Example_Test.php'), 'tests/Unit/Example_Test.php');
 	writeTemplateFile(path.join(templatesDir, 'gitignore.tpl'), '.gitignore');
 	writeTemplateFile(path.join(templatesDir, 'editorconfig.tpl'), '.editorconfig');
+	writeTemplateFile(path.join(templatesDir, 'distignore.tpl'), '.distignore');
 	writeTemplateFile(path.join(templatesDir, 'assets/css/main.css'), 'assets/css/main.css');
 	writeTemplateFile(path.join(templatesDir, 'assets/js/main.js'), 'assets/js/main.js');
 	writeTemplateFile(path.join(templatesDir, 'readme.txt'), 'readme.txt');
@@ -529,9 +528,16 @@ export function runGenerator(answers) {
 
 	// Selected modules mapping
 	const moduleRegistrations = [];
+	const bootHooks = [];
 
 	if (selectedModules.includes('admin_settings')) {
-		writeTemplateFile(path.join(templatesDir, 'src/Admin/Settings_Page.php'), 'src/Admin/Settings_Page.php');
+		let settingsContent = fs.readFileSync(path.join(templatesDir, 'src/Admin/Settings_Page.php'), 'utf8');
+		const reactAdminRoot = answers.useReact ? '\t\t\t<div id="{{PREFIX}}-app-root"></div>\n' : '';
+		settingsContent = settingsContent.replace('{{REACT_ADMIN_ROOT}}', () => reactAdminRoot);
+		settingsContent = processTemplateContent(settingsContent);
+		const settingsDest = path.join(targetDir, 'src/Admin/Settings_Page.php');
+		fs.mkdirSync(path.dirname(settingsDest), { recursive: true });
+		fs.writeFileSync(settingsDest, settingsContent, 'utf8');
 		moduleRegistrations.push('\n\t\t$services[\'admin_settings\'] = new Admin\\Settings_Page();');
 	}
 	if (selectedModules.includes('shortcode')) {
@@ -561,13 +567,34 @@ export function runGenerator(answers) {
 		writeTemplateFile(path.join(templatesDir, 'assets/css/widgets/sample-widget.css'), 'assets/css/widgets/sample-widget.css');
 		writeTemplateFile(path.join(templatesDir, 'assets/js/widgets/sample-widget.js'), 'assets/js/widgets/sample-widget.js');
 		moduleRegistrations.push('\n\t\t$services[\'elementor_notice\'] = new Elementor\\Dependency_Notice();');
-		moduleRegistrations.push('\t\tadd_action( \'wp_enqueue_scripts\', array( $this, \'register_widget_assets\' ) );');
-		moduleRegistrations.push('\t\tadd_action( \'elementor/editor/after_enqueue_styles\', array( $this, \'register_widget_assets\' ) );');
-		moduleRegistrations.push('\t\tadd_action( \'elementor/widgets/register\', array( $this, \'register_widgets\' ) );');
+		// Hook registration is a boot()-time side effect, not a service build step — it must run
+		// even when get_instance() is called with an injected $services array that skips build_services().
+		bootHooks.push('\t\tadd_action( \'wp_enqueue_scripts\', array( $this, \'register_widget_assets\' ) );');
+		bootHooks.push('\t\tadd_action( \'elementor/editor/after_enqueue_styles\', array( $this, \'register_widget_assets\' ) );');
+		bootHooks.push('\t\tadd_action( \'elementor/widgets/register\', array( $this, \'register_widgets\' ) );');
 	}
 	if (selectedModules.includes('woocommerce_hooks')) {
 		writeTemplateFile(path.join(templatesDir, 'src/Woo/Woo_Hooks.php'), 'src/Woo/Woo_Hooks.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Gateways/Gateway.php'), 'src/Woo/Gateways/Gateway.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Gateways/Blocks_Payment_Method_Type.php'), 'src/Woo/Gateways/Blocks_Payment_Method_Type.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Shipping/Shipping_Method.php'), 'src/Woo/Shipping/Shipping_Method.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Emails/Custom_Email.php'), 'src/Woo/Emails/Custom_Email.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Products/Custom_Product.php'), 'src/Woo/Products/Custom_Product.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Blocks/Integration.php'), 'src/Woo/Blocks/Integration.php');
+		writeTemplateFile(path.join(templatesDir, 'src/Woo/Blocks/Cart_Summary_Block.php'), 'src/Woo/Blocks/Cart_Summary_Block.php');
+		writeTemplateFile(path.join(templatesDir, 'woo-email-templates/emails/custom-email.php'), `templates/emails/${answers.prefix.toLowerCase()}-custom-email.php`);
+		writeTemplateFile(path.join(templatesDir, 'woo-email-templates/emails/plain/custom-email.php'), `templates/emails/plain/${answers.prefix.toLowerCase()}-custom-email.php`);
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/wc-gateway-block.js'), 'assets/src/wc-gateway-block.js');
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/blocks-integration.js'), 'assets/src/blocks-integration.js');
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/blocks/cart-summary/block.json'), 'assets/src/blocks/cart-summary/block.json');
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/blocks/cart-summary/index.js'), 'assets/src/blocks/cart-summary/index.js');
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/blocks/cart-summary/render.php'), 'assets/src/blocks/cart-summary/render.php');
 		moduleRegistrations.push('\n\t\t$services[\'woo\'] = new Woo\\Woo_Hooks();');
+	}
+	if (selectedModules.includes('interactivity')) {
+		writeTemplateFile(path.join(templatesDir, 'src/Frontend/Interactivity.php'), 'src/Frontend/Interactivity.php');
+		writeTemplateFile(path.join(templatesDir, 'react/assets/src/view.js'), 'assets/src/view.js');
+		moduleRegistrations.push('\n\t\t$services[\'interactivity\'] = new Frontend\\Interactivity();');
 	}
 
 	let elementorWidgetMethods = '';
@@ -673,23 +700,84 @@ export function runGenerator(answers) {
 \t}\n\n`;
 	}
 
-	// React setup
+	// React admin app (wp-admin only) + Interactivity API (frontend) + WooCommerce
+	// Blocks gateway build pipeline. These are independent toggles that share one
+	// @wordpress/scripts build:
+	// useReact          -> assets/src/index.js (wp-admin React app)
+	// interactivity mod -> assets/src/view.js (frontend Interactivity API store)
+	// woocommerce_hooks -> assets/src/wc-gateway-block.js (block checkout payment method)
+	const needsBuildPipeline = answers.useReact || hasInteractivity || hasWoo;
+
 	let reactAssetsRegistration = '';
 	let readmeReactInstall = '';
 	let readmeReactScripts = '';
 	let ciNodeJob = '';
 
 	if (answers.useReact) {
-		writeTemplateFile(path.join(templatesDir, 'react/package.json'), 'package.json');
 		writeTemplateFile(path.join(templatesDir, 'react/assets/src/index.js'), 'assets/src/index.js');
-		writeTemplateFile(path.join(templatesDir, 'src/Frontend/Assets.php'), 'src/Frontend/Assets.php');
-		reactAssetsRegistration = '\n\t\t$services[\'assets\'] = new Frontend\\Assets();\n';
-		readmeReactInstall = '3. Run `npm install` and `npm run build` to compile React assets.\n   > Note: `assets/build` is gitignored and generated during build.';
-		readmeReactScripts = '- `npm run build` — Build React assets for production.\n- `npm run start` — Start React asset dev server in watch mode.';
+
+		let assetsContent = fs.readFileSync(path.join(templatesDir, 'src/Admin/Assets.php'), 'utf8');
+		const reactAdminHookGuard = selectedModules.includes('admin_settings')
+			? '\t\tif ( \'settings_page_{{SLUG}}\' !== $hook_suffix ) {\n\t\t\treturn;\n\t\t}\n\n'
+			: '\t\t// TODO: narrow this to your plugin\'s own admin screen(s), e.g. compare $hook_suffix.\n';
+		assetsContent = assetsContent.replace('{{REACT_ADMIN_HOOK_GUARD}}', () => reactAdminHookGuard);
+		assetsContent = processTemplateContent(assetsContent);
+		const assetsDestPath = path.join(targetDir, 'src/Admin/Assets.php');
+		fs.mkdirSync(path.dirname(assetsDestPath), { recursive: true });
+		fs.writeFileSync(assetsDestPath, assetsContent, 'utf8');
+
+		reactAssetsRegistration = '\n\t\t$services[\'assets\'] = new Admin\\Assets();\n';
+	}
+
+	if (needsBuildPipeline) {
+		writeTemplateFile(path.join(templatesDir, 'react/package.json'), 'package.json');
+
+		// wp-scripts only auto-detects a single "src/index.js" entry (or, if any
+		// block.json exists under the src dir, ONLY the entries it derives from
+		// block.json files — "src/index.js" is silently dropped in that case).
+		// Once we ship more than one of: the admin app, the Interactivity API view
+		// script, the WooCommerce Blocks gateway/integration scripts, or a native
+		// block (block.json), we must override entry resolution via webpack.config.js
+		// — wp-scripts picks this file up automatically if present at the project root.
+		//
+		// IMPORTANT: @wordpress/scripts assigns `entry` as a *function* (webpack's
+		// lazy-entry form) so it can glob for block.json files at build time, not a
+		// plain object — `{ ...defaultConfig.entry }` silently spreads to `{}` and
+		// drops every auto-discovered block entry. It must be invoked, not spread.
+		if (hasInteractivity || hasWoo) {
+			const entries = [];
+			if (answers.useReact) entries.push('\t\tindex: \'./assets/src/index.js\',');
+			if (hasInteractivity) entries.push('\t\tview: \'./assets/src/view.js\',');
+			if (hasWoo) {
+				entries.push('\t\t\'wc-gateway-block\': \'./assets/src/wc-gateway-block.js\',');
+				entries.push('\t\t\'blocks-integration\': \'./assets/src/blocks-integration.js\',');
+			}
+
+			const webpackConfig = `const defaultConfig = require( '@wordpress/scripts/config/webpack.config' );
+
+/**
+ * Merges our explicit entries with wp-scripts' own lazily-computed entry
+ * function so native blocks (block.json under assets/src/blocks/**) keep
+ * building automatically alongside them. wp-scripts loads this file
+ * automatically when present at the project root.
+ */
+module.exports = {
+	...defaultConfig,
+	entry: () => ( {
+		...( typeof defaultConfig.entry === 'function' ? defaultConfig.entry() : defaultConfig.entry ),
+${entries.join('\n')}
+	} ),
+};
+`;
+			fs.writeFileSync(path.join(targetDir, 'webpack.config.js'), webpackConfig, 'utf8');
+		}
+
+		readmeReactInstall = '3. Run `npm install` and `npm run build` to compile JS assets.\n   > Note: `assets/build` is gitignored and generated during build.';
+		readmeReactScripts = '- `npm run build` — Build JS assets for production.\n- `npm run start` — Start JS asset dev server in watch mode.';
 
 		ciNodeJob = `
   node-build:
-    name: Build React Assets
+    name: Build JS Assets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -701,7 +789,7 @@ export function runGenerator(answers) {
           node-version: '20'
 
       - name: Install Node Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Assets
         run: npm run build`;
@@ -712,6 +800,7 @@ export function runGenerator(answers) {
 	pluginContent = pluginContent.replace('{{REACT_ASSETS_REGISTRATION}}', () => reactAssetsRegistration);
 	pluginContent = pluginContent.replace('{{MODULE_REGISTRATIONS}}', () => moduleRegistrations.length > 0 ? moduleRegistrations.join('\n') + '\n' : '');
 	pluginContent = pluginContent.replace('{{ELEMENTOR_WIDGET_METHODS}}', () => elementorWidgetMethods);
+	pluginContent = pluginContent.replace('{{BOOT_HOOKS}}', () => bootHooks.length > 0 ? bootHooks.join('\n') + '\n' : '');
 	pluginContent = processTemplateContent(pluginContent);
 	const pluginDestPath = path.join(targetDir, 'src/Plugin.php');
 	fs.mkdirSync(path.dirname(pluginDestPath), { recursive: true });

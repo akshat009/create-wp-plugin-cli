@@ -24,6 +24,8 @@ node index.js --yes --name "My Plugin" --prefix myp --namespace MyPlugin --out .
 
 Available flags: `--help`, `--version`, `--yes`, `--name`, `--slug`, `--namespace`, `--prefix`, `--author`, `--email`, `--author-uri`, `--description`, `--min-php`, `--out`, `--modules`, `--react`, `--no-react`.
 
+`--modules` accepts a comma-separated list of: `admin_settings`, `shortcode`, `rest_api`, `ajax_handler`, `cpt_taxonomy`, `cron`, `elementor_widget`, `woocommerce_hooks`, `interactivity`.
+
 ## After Generating
 
 After running the generator, perform the following steps to initialize your project:
@@ -44,8 +46,10 @@ git init && git add -A && git commit -m "scaffold"
 - 🎨 **WordPress Coding Standards**: Full WPCS, Docs, VIP Go, and PHPCompatibilityWP integration (`composer lint`).
 - 🧪 **PHPUnit & Brain Monkey**: Zero-WordPress-install unit testing suite (`composer test`).
 - 💻 **WP-CLI Commands**: Built-in `wp <prefix> status` and `wp <prefix> cache clear` handlers.
-- ⚛️ **React Asset Build Pipeline**: Built-in `@wordpress/scripts` asset compilation workflow.
-- 📦 **Modular Architecture**: Toggleable scaffolding for Admin Settings Page, Shortcodes, REST API, AJAX, CPT + Taxonomies, Cron Jobs, Elementor Widgets, and WooCommerce Hooks.
+- ⚛️ **React Admin App Build Pipeline**: Built-in `@wordpress/scripts` workflow that mounts a real interactive React app into your plugin's own wp-admin screen (not shipped to frontend visitors).
+- ⚡ **Frontend Interactivity Module**: WordPress's native Interactivity API (directive-based, WP 6.5+) for lightweight, actually-interactive frontend markup without shipping a React runtime to visitors.
+- 📦 **Modular Architecture**: Toggleable scaffolding for Admin Settings Page, Shortcodes, REST API, AJAX, CPT + Taxonomies, Cron Jobs, Elementor Widgets, WooCommerce, and Frontend Interactivity.
+- 🛒 **Full WooCommerce Integration**: Payment gateway (classic checkout **and** WooCommerce Blocks / block-based checkout), shipping method, custom order email (with its own template files), custom product type, HPOS compatibility — all real, working, PHPCS-clean skeletons, not stubs you have to wire up yourself.
 - 🔌 **Service Composition**: Extensible `{{PREFIX}}_services` filter to inject third-party `Registrable` services.
 - 🎨 **Elementor Auto-Discovery**: Automatic discovery of concrete widgets in `src/Widgets/` with convention-based CSS/JS registration (`{{PREFIX}}-widget-slug`).
 - 🛠️ **VS Code Tooling**: Code snippets (`wpelwidget`), PHPCS integration (`valeryanm.vscode-phpsab`), EditorConfig support, and WordPress stubs via Intelephense.

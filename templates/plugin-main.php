@@ -4,7 +4,7 @@
  * Plugin URI:        {{AUTHOR_URI}}
  * Description:       {{DESCRIPTION}}
  * Version:           {{VERSION}}
- * Requires at least: 6.0
+ * Requires at least: {{REQUIRES_AT_LEAST}}
  * Requires PHP:      {{MIN_PHP}}
  * Author:            {{AUTHOR}}
  * Author URI:        {{AUTHOR_URI}}
