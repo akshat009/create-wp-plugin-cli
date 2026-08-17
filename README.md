@@ -7,10 +7,10 @@ Interactive scaffold generator for modern, production-ready WordPress plugins â€
 ### Quick Start via NPX
 Run directly without installing:
 ```bash
-npx github:akshat009/create-wp-plugin
+npx create-wp-plugin-cli
 ```
 
-> **Note:** `npx create-wp-plugin` is not published to npm registry yet â€” use `npx github:akshat009/create-wp-plugin`.
+> Published on npm as [`create-wp-plugin-cli`](https://www.npmjs.com/package/create-wp-plugin-cli) (the `create-wp-plugin` name was already taken). You can still run the latest `main` branch directly from GitHub with `npx github:akshat009/create-wp-plugin`.
 
 ### Local Usage
 ```bash

@@ -179,7 +179,7 @@ function parseCLIArgs() {
 
 function showHelp() {
 	console.log(`
-Usage: create-wp-plugin [options]
+Usage: create-wp-plugin-cli [options]
 
 Options:
   -h, --help               Show help text
