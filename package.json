@@ -1,6 +1,6 @@
 {
   "name": "create-wp-plugin-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Interactive scaffold generator for modern WordPress plugins — PSR-4, WPCS/VIP standards, PHPUnit, WP-CLI, WooCommerce, Interactivity API, and CI out of the box",
   "main": "index.js",
   "bin": {
