@@ -23,6 +23,12 @@ jobs:
           node-version: 22   # Trusted Publishing needs npm CLI >=11.5.1, which needs Node >=22.14
           registry-url: 'https://registry.npmjs.org'
 
+      # Node 22 bundles an older npm (~10.x) that predates Trusted Publishing
+      # (OIDC) support. Force the CLI itself up to the minimum that supports it,
+      # independent of whatever Node's setup-node action happened to bundle.
+      - name: Update npm to a version that supports Trusted Publishing
+        run: npm install -g npm@latest
+
       - name: Install Dependencies
         run: npm ci
 
