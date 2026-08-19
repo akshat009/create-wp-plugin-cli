@@ -14,6 +14,7 @@ import {
 	validateEmail,
 	validateMinPhp,
 	validateOutputDir,
+	validateModules,
 	validateAll,
 	runGenerator
 } from '../index.js';
@@ -33,9 +34,13 @@ test('suggestNamespace generates StudlyCase dropping filler words', () => {
 	assert.equal(suggestNamespace('   '), 'MyPlugin');
 });
 
-test('suggestPrefix generates lowercase 3-4 char prefix', () => {
-	assert.equal(suggestPrefix('My Awesome Plugin'), 'map');
+test('suggestPrefix generates lowercase prefix, at least 4 chars (WPCS ShortPrefixPassed floor)', () => {
+	// Initials alone ("map") are only 3 chars — WPCS's PrefixAllGlobals.ShortPrefixPassed
+	// sniff flags anything under 4, so the suggestion pads out deterministically.
+	assert.equal(suggestPrefix('My Awesome Plugin'), 'mapp');
 	assert.equal(suggestPrefix('Plugin'), 'plugin');
+	assert.ok(suggestPrefix('Go').length >= 4);
+	assert.ok(suggestPrefix('My Plugin').length >= 4);
 });
 
 test('Group 2 Validators', () => {
@@ -45,7 +50,8 @@ test('Group 2 Validators', () => {
 	assert.equal(validateSlug('my-plugin'), true);
 	assert.equal(typeof validateSlug('My Plugin'), 'string');
 
-	assert.equal(validatePrefix('myp'), true);
+	assert.equal(validatePrefix('myplug'), true);
+	assert.equal(typeof validatePrefix('myp'), 'string'); // 3 chars: below WPCS's 4-char ShortPrefixPassed floor
 	assert.equal(typeof validatePrefix('123'), 'string');
 
 	assert.equal(validateNamespace('MyPlugin'), true);
@@ -66,7 +72,7 @@ test('Group 2 Validators', () => {
 	assert.equal(validateAll({
 		name: 'Test Plugin',
 		slug: 'test-plugin',
-		prefix: 'tp',
+		prefix: 'tplg',
 		namespace: 'TestPlugin',
 		authorEmail: 'author@example.com',
 		minPhp: '8.0',
@@ -166,16 +172,32 @@ test('Non-interactive scaffolding for Elementor variant includes php-elementor.c
 });
 
 test('validatePrefix rejects reserved words', () => {
+	// "wp" and "php" are also caught by the 4-char length floor first, but they
+	// must still come back rejected either way — that's what matters here.
 	assert.equal(typeof validatePrefix('wp'), 'string');
 	assert.equal(typeof validatePrefix('php'), 'string');
 	assert.equal(typeof validatePrefix('wordpress'), 'string');
-	assert.equal(validatePrefix('myp'), true);
+	assert.equal(validatePrefix('myplug'), true);
 });
 
 test('validateOutputDir allows paths outside the current working directory', () => {
 	assert.equal(validateOutputDir('../sibling-plugin'), true);
 	assert.equal(validateOutputDir('/absolute/plugin-dir'), true);
 	assert.equal(typeof validateOutputDir(''), 'string');
+});
+
+test('validateModules rejects unknown module names but allows empty/known lists', () => {
+	assert.equal(validateModules([]), true);
+	assert.equal(validateModules(undefined), true);
+	assert.equal(validateModules(['admin_settings', 'rest_api']), true);
+	assert.equal(typeof validateModules(['admin_settings', 'not_a_real_module']), 'string');
+});
+
+test('validateEmail rejects garbage that merely contains "@"', () => {
+	assert.equal(validateEmail('name@example.com'), true);
+	assert.equal(validateEmail(''), true); // optional field
+	assert.equal(typeof validateEmail('@@@@'), 'string');
+	assert.equal(typeof validateEmail('no-at-sign'), 'string');
 });
 
 test('runGenerator throws (does not process.exit) when the output directory is non-empty', () => {
@@ -513,6 +535,46 @@ test('WooCommerce Cart block: native cart-summary block + Blocks Integration sca
 
 	const mainPhp = fs.readFileSync(path.join(outDir, 'cart-block-plugin.php'), 'utf8');
 	assert.ok(mainPhp.includes('Requires at least: 6.4'), 'block.json "render" field needs WP 6.4+');
+
+	fs.rmSync(outDir, { recursive: true, force: true });
+});
+
+test('composer.json package name derives from the author, not a literal "vendor/" placeholder', () => {
+	const outDir = path.join(__dirname, '../tmp-test-composer-vendor');
+	runGenerator({
+		name: 'Vendor Test Plugin',
+		slug: 'vendor-test-plugin',
+		prefix: 'vtpl',
+		namespace: 'VendorTestPlugin',
+		authorName: 'Jane Doe',
+		minPhp: '8.0',
+		modules: [],
+		useReact: false,
+		out: outDir
+	});
+
+	const composerJson = JSON.parse(fs.readFileSync(path.join(outDir, 'composer.json'), 'utf8'));
+	assert.equal(composerJson.name, 'jane-doe/vendor-test-plugin');
+
+	fs.rmSync(outDir, { recursive: true, force: true });
+});
+
+test('composer.json package name falls back to "vendor/" when no author name is given', () => {
+	const outDir = path.join(__dirname, '../tmp-test-composer-vendor-fallback');
+	runGenerator({
+		name: 'No Author Plugin',
+		slug: 'no-author-plugin',
+		prefix: 'napl',
+		namespace: 'NoAuthorPlugin',
+		authorName: '',
+		minPhp: '8.0',
+		modules: [],
+		useReact: false,
+		out: outDir
+	});
+
+	const composerJson = JSON.parse(fs.readFileSync(path.join(outDir, 'composer.json'), 'utf8'));
+	assert.equal(composerJson.name, 'vendor/no-author-plugin');
 
 	fs.rmSync(outDir, { recursive: true, force: true });
 });

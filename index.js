@@ -9,6 +9,19 @@ import prompts from 'prompts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export const MODULE_DEFINITIONS = [
+	{ title: 'admin settings page', value: 'admin_settings' },
+	{ title: 'shortcode', value: 'shortcode' },
+	{ title: 'REST API', value: 'rest_api' },
+	{ title: 'AJAX handler', value: 'ajax_handler' },
+	{ title: 'CPT + taxonomy', value: 'cpt_taxonomy' },
+	{ title: 'cron', value: 'cron' },
+	{ title: 'Elementor widget base', value: 'elementor_widget' },
+	{ title: 'WooCommerce hooks', value: 'woocommerce_hooks' },
+	{ title: 'Frontend Interactivity (WordPress Interactivity API)', value: 'interactivity' }
+];
+export const VALID_MODULES = new Set(MODULE_DEFINITIONS.map(m => m.value));
+
 export function slugify(text) {
 	if (!text) return '';
 	return text
@@ -45,9 +58,19 @@ export function suggestPrefix(name) {
 
 	const filtered = words.filter(w => !fillers.has(w.toLowerCase()));
 	const targetWords = filtered.length > 0 ? filtered : words;
-	if (targetWords.length === 1) return targetWords[0].toLowerCase();
+	let prefix = targetWords.length === 1
+		? targetWords[0].toLowerCase()
+		: targetWords.map(w => w.charAt(0).toLowerCase()).join('');
 
-	return targetWords.map(w => w.charAt(0).toLowerCase()).join('');
+	// WPCS's PrefixAllGlobals.ShortPrefixPassed sniff flags prefixes under 4
+	// characters as a collision risk, so a short suggestion would fail the
+	// scaffold's own lint step by default. Pad it out deterministically.
+	if (prefix.length < 4) {
+		const filler = targetWords[targetWords.length - 1].toLowerCase().replace(/[^a-z0-9]/g, '');
+		prefix = (prefix + filler).padEnd(4, 'x').slice(0, Math.max(4, prefix.length));
+	}
+
+	return prefix;
 }
 
 export function validateName(val) {
@@ -77,8 +100,8 @@ export function validatePrefix(val) {
 	if (val.includes('-')) {
 		return 'Prefix cannot contain hyphens because hyphens are invalid in PHP function names and constants.';
 	}
-	if (val.length < 2 || val.length > 20) {
-		return 'Prefix must be between 2 and 20 characters.';
+	if (val.length < 4 || val.length > 20) {
+		return 'Prefix must be between 4 and 20 characters — WPCS\'s PrefixAllGlobals.ShortPrefixPassed sniff flags anything shorter as a collision risk.';
 	}
 	if (!/^[a-z][a-z0-9_]*$/.test(val)) {
 		return 'Prefix must start with a lowercase letter and contain only lowercase letters, numbers, and underscores.';
@@ -102,9 +125,22 @@ export function validateNamespace(val) {
 export function validateEmail(val) {
 	if (val === undefined || val === null || val === '') return true;
 	if (typeof val === 'string' && val.trim().length > 0) {
-		if (!val.includes('@')) {
-			return 'Author email must contain "@".';
+		// Practical email shape check (not full RFC 5322): one local part, one "@",
+		// a domain with at least one dot, no whitespace. Good enough to reject
+		// obvious garbage like "@@@@" without rejecting real-world addresses.
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) {
+			return 'Author email must be a valid address (e.g. name@example.com).';
 		}
+	}
+	return true;
+}
+
+export function validateModules(modules) {
+	if (!modules || modules.length === 0) return true;
+	const unknown = modules.filter(m => !VALID_MODULES.has(m));
+	if (unknown.length > 0) {
+		const known = [...VALID_MODULES].join(', ');
+		return `Unknown module(s): ${unknown.join(', ')}. Valid modules are: ${known}.`;
 	}
 	return true;
 }
@@ -136,6 +172,7 @@ export function validateAll(answers) {
 		{ field: 'namespace', result: validateNamespace(answers.namespace) },
 		{ field: 'prefix', result: validatePrefix(answers.prefix) },
 		{ field: 'email', result: validateEmail(answers.authorEmail) },
+		{ field: 'modules', result: validateModules(answers.modules) },
 		{ field: 'minPhp', result: validateMinPhp(answers.minPhp) },
 		{ field: 'outputDir', result: validateOutputDir(answers.outputDir) }
 	];
@@ -276,17 +313,7 @@ async function main() {
 
 		const initialModules = flags.modules !== undefined ? parseModules(flags.modules) : [];
 
-		const choices = [
-			{ title: 'admin settings page', value: 'admin_settings' },
-			{ title: 'shortcode', value: 'shortcode' },
-			{ title: 'REST API', value: 'rest_api' },
-			{ title: 'AJAX handler', value: 'ajax_handler' },
-			{ title: 'CPT + taxonomy', value: 'cpt_taxonomy' },
-			{ title: 'cron', value: 'cron' },
-			{ title: 'Elementor widget base', value: 'elementor_widget' },
-			{ title: 'WooCommerce hooks', value: 'woocommerce_hooks' },
-			{ title: 'Frontend Interactivity (WordPress Interactivity API)', value: 'interactivity' }
-		].map(c => ({
+		const choices = MODULE_DEFINITIONS.map(c => ({
 			...c,
 			selected: initialModules.includes(c.value)
 		}));
@@ -476,6 +503,7 @@ export function runGenerator(answers) {
 		'{{PREFIX_UPPER}}': answers.prefix.toUpperCase(),
 		'{{AUTHOR}}': answers.authorName,
 		'{{AUTHOR_EMAIL}}': answers.authorEmail || 'author@example.com',
+		'{{COMPOSER_VENDOR}}': slugify(answers.authorName) || 'vendor',
 		'{{AUTHOR_URI}}': answers.authorUri,
 		'{{DESCRIPTION}}': answers.description,
 		'{{MIN_PHP}}': answers.minPhp,
@@ -899,7 +927,23 @@ ${entries.join('\n')}
 	console.log('      First run note: "No composer.lock file present" is normal; Composer will generate it automatically.\n');
 }
 
-if (process.argv[1] && path.resolve(__filename) === path.resolve(process.argv[1])) {
+function isRunAsScript() {
+	if (!process.argv[1]) return false;
+	// npm/npx install the CLI behind a symlink on macOS/Linux (bin/create-wp-plugin-cli
+	// -> ../lib/node_modules/create-wp-plugin-cli/index.js). process.argv[1] is the
+	// symlink path while __filename is already resolved to the real file, so compare
+	// realpaths rather than raw paths or this guard silently never runs main().
+	let invokedPath = process.argv[1];
+	try {
+		invokedPath = fs.realpathSync(invokedPath);
+	} catch {
+		// Path doesn't exist as given (e.g. invoked via a loader that fabricates
+		// argv[1]) — fall back to the raw value so the comparison below still applies.
+	}
+	return path.resolve(__filename) === path.resolve(invokedPath);
+}
+
+if (isRunAsScript()) {
 	main().catch(err => {
 		console.error('An error occurred:', err);
 		process.exit(1);

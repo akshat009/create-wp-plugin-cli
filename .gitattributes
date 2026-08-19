@@ -1,0 +1,6 @@
+# Force LF line endings for all text files regardless of the committing
+# machine's core.autocrlf setting. This repo is published to npm verbatim
+# (index.js + templates/**) — CRLF sneaking into a commit corrupts generated
+# scaffolds (mixed CRLF/LF within a single file breaks PHP_CodeSniffer's
+# tokenizer) and diverges from what's checked into GitHub.
+* text=auto eol=lf
