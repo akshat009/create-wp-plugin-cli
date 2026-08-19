@@ -28,3 +28,83 @@ jobs:
 
       - name: Run Tests
         run: npm test
+
+  self-consumption:
+    name: Generate + Lint a Real Scaffold (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+          coverage: none
+
+      # Pack + global-install the real tarball instead of running `node index.js`
+      # directly. npm/npx put a *symlink* to index.js on the PATH on macOS/Linux
+      # (unlike Windows, which generates a shim script) — that's the exact install
+      # shape that silently broke the CLI's main-guard before v1.0.2, and running
+      # the source file directly would never have caught it.
+      - name: Pack the CLI
+        run: npm pack
+
+      - name: Install the packed CLI globally (real bin, not `node index.js`)
+        run: |
+          mkdir -p "$HOME/npm-global"
+          npm install -g --prefix "$HOME/npm-global" ./create-wp-plugin-cli-*.tgz
+          echo "$HOME/npm-global/bin" >> "$GITHUB_PATH"
+
+      - name: Generate a real scaffold via the installed bin (all modules + React)
+        run: |
+          create-wp-plugin-cli -y \
+            --name "Self Consumption Test" \
+            --slug self-consumption-test \
+            --namespace SelfConsumptionTest \
+            --prefix sctp \
+            --author "CI" \
+            --email ci@example.com \
+            --description "Self-consumption CI check" \
+            --modules "admin_settings,shortcode,rest_api,ajax_handler,cpt_taxonomy,cron,elementor_widget,woocommerce_hooks,interactivity" \
+            --react \
+            --out "$RUNNER_TEMP/generated-plugin"
+
+      - name: Verify the scaffold was actually generated
+        run: |
+          if [ ! -f "$RUNNER_TEMP/generated-plugin/self-consumption-test.php" ]; then
+            echo "::error::No plugin file was generated — main() likely never ran (symlink main-guard regression). See index.js's isRunAsScript()."
+            exit 1
+          fi
+
+      - name: composer validate --strict
+        working-directory: ${{ runner.temp }}/generated-plugin
+        run: composer validate --strict
+
+      - name: composer install
+        working-directory: ${{ runner.temp }}/generated-plugin
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: composer lint
+        working-directory: ${{ runner.temp }}/generated-plugin
+        run: composer lint
+
+      - name: composer test
+        working-directory: ${{ runner.temp }}/generated-plugin
+        run: composer test
+
+      - name: npm install + build (React admin pipeline)
+        working-directory: ${{ runner.temp }}/generated-plugin
+        run: |
+          npm install
+          npm run build
