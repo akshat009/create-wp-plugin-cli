@@ -10,7 +10,7 @@ Run directly without installing:
 npx create-wp-plugin-cli
 ```
 
-> Published on npm as [`create-wp-plugin-cli`](https://www.npmjs.com/package/create-wp-plugin-cli) (the `create-wp-plugin` name was already taken). You can still run the latest `main` branch directly from GitHub with `npx github:akshat009/create-wp-plugin`.
+> Published on npm as [`create-wp-plugin-cli`](https://www.npmjs.com/package/create-wp-plugin-cli) (the `create-wp-plugin` name was already taken). You can still run the latest `main` branch directly from GitHub with `npx github:akshat009/create-wp-plugin-cli`.
 
 ### Local Usage
 ```bash

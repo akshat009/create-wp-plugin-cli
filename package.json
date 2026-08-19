@@ -37,11 +37,11 @@
   "license": "GPL-2.0-or-later",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/akshat009/create-wp-plugin.git"
+    "url": "git+https://github.com/akshat009/create-wp-plugin-cli.git"
   },
-  "homepage": "https://github.com/akshat009/create-wp-plugin#readme",
+  "homepage": "https://github.com/akshat009/create-wp-plugin-cli#readme",
   "bugs": {
-    "url": "https://github.com/akshat009/create-wp-plugin/issues"
+    "url": "https://github.com/akshat009/create-wp-plugin-cli/issues"
   },
   "dependencies": {
     "prompts": "^2.4.2"
