@@ -272,7 +272,7 @@ async function main() {
 			process.exit(1);
 		}
 	} else {
-		console.log('\n🚀 Welcome to create-wp-plugin scaffold generator!\n');
+		console.log('\n🚀 Welcome to create-wp-plugin-cli scaffold generator!\n');
 
 		const initialModules = flags.modules !== undefined ? parseModules(flags.modules) : [];
 
