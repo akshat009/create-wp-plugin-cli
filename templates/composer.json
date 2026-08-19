@@ -1,5 +1,5 @@
 {
-	"name": "vendor/{{SLUG}}",
+	"name": "{{COMPOSER_VENDOR}}/{{SLUG}}",
 	"description": "{{DESCRIPTION}}",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",
