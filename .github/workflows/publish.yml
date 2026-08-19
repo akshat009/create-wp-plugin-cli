@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required for npm provenance (Sigstore-signed build attestation)
+  id-token: write   # required for npm Trusted Publishing (OIDC) + provenance
 
 jobs:
   publish:
@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22   # Trusted Publishing needs npm CLI >=11.5.1, which needs Node >=22.14
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install Dependencies
@@ -38,7 +38,10 @@ jobs:
             exit 1
           fi
 
+      # Auth is via npm Trusted Publishing (OIDC) -- configured on npmjs.com under
+      # this package's Settings > Trusted publishing, linked to this exact repo +
+      # workflow filename. No token/secret needed; npm CLI exchanges the GitHub
+      # OIDC token (from id-token: write above) for a short-lived publish token
+      # automatically.
       - name: Publish (with provenance)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
