@@ -41,6 +41,31 @@ prompt. Emoji output falls back to ASCII when `NO_COLOR` is set or the terminal
 can't render it. A failure partway through generation rolls back the directory it
 created.
 
+### With Claude Code
+
+This repo is also a Claude Code plugin marketplace. Its `scaffold` skill turns a
+plain-English request ("a WooCommerce plugin with a settings page and a Store API
+extension") into the right modules, runs the generator non-interactively, then
+installs dependencies and runs lint and tests.
+
+```bash
+claude plugin marketplace add akshat009/create-wp-plugin-cli
+claude plugin install create-wp-plugin@create-wp-plugin-cli
+```
+
+Then, in a Claude Code session:
+
+```
+/create-wp-plugin:scaffold WooCommerce plugin with a settings page and WP-CLI commands
+```
+
+Claude also picks the skill up on its own when you ask for a new WordPress plugin.
+To install only the skill, for Claude Code or another agent that reads `SKILL.md`:
+
+```bash
+npx skills add akshat009/create-wp-plugin-cli
+```
+
 ### Flags
 
 `--help`, `--version`, `--yes`, `--name`, `--slug`, `--namespace`, `--prefix`,
