@@ -1,5 +1,6 @@
 {
   "name": "create-wp-plugin",
+  "displayName": "Create WP Plugin",
   "description": "Scaffold a PHP 8.2, PSR-4 WordPress/WooCommerce plugin with tests, WPCS/VIP linting and CI using create-wp-plugin-cli.",
   "version": "1.0.0",
   "author": {
@@ -8,6 +9,15 @@
   },
   "homepage": "https://github.com/akshat009/create-wp-plugin-cli",
   "repository": "https://github.com/akshat009/create-wp-plugin-cli",
+  "documentationUrl": "https://github.com/akshat009/create-wp-plugin-cli#with-claude-code",
+  "supportUrl": "https://github.com/akshat009/create-wp-plugin-cli/issues",
   "license": "GPL-2.0-or-later",
-  "keywords": ["wordpress", "woocommerce", "plugin", "scaffold", "wpcs", "phpunit"]
+  "keywords": [
+    "wordpress",
+    "woocommerce",
+    "plugin",
+    "scaffold",
+    "wpcs",
+    "phpunit"
+  ]
 }
