@@ -11,6 +11,7 @@
   "repository": "https://github.com/akshat009/create-wp-plugin-cli",
   "documentationUrl": "https://github.com/akshat009/create-wp-plugin-cli#with-claude-code",
   "supportUrl": "https://github.com/akshat009/create-wp-plugin-cli/issues",
+  "privacyPolicyUrl": "https://github.com/akshat009/create-wp-plugin-cli/blob/main/PRIVACY.md",
   "license": "GPL-2.0-or-later",
   "keywords": [
     "wordpress",
